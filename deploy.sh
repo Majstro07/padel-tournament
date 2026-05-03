@@ -1,5 +1,5 @@
 #!/bin/bash
-# deploy.sh — pull latest code, build, and restart the app
+# deploy.sh — pull latest code and restart the app
 # Run this on the server after pushing changes to GitHub:  bash deploy.sh
 
 set -e
@@ -13,9 +13,6 @@ git reset --hard origin/main
 
 echo "[Deploy] Installing dependencies..."
 npm install --omit=dev
-
-echo "[Deploy] Building React app..."
-npm run build
 
 echo "[Deploy] Restarting app..."
 pm2 restart padel-tournament
