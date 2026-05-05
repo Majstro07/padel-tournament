@@ -95,14 +95,14 @@ function teamCompliance(teamId, matches, jokers, numWindows) {
 
 // ── Real teams ────────────────────────────────────────────────────────────────
 const SEED_TEAMS = [
-  { id:"t1", name:"Sparťanská šlechta",    players:["Zdeněk Šubr",    "Josef Loužecký"], password:"sparta123",  color:"#f97316" },
+  { id:"t1", name:"Sparťanská šlechta",    players:["Vendy Kalita",    "Josef Loužecký"], password:"sparta123",  color:"#f97316" },
   { id:"t2", name:"Beak Team",             players:["Petr Klika",      "Daniel Janča"],   password:"beak123",   color:"#3b82f6" },
   { id:"t3", name:"EWP",                   players:["Alex Vološin",    "Ján Nikodem"],    password:"ewp123",    color:"#8b5cf6", isAdmin:true },
   { id:"t4", name:"Zrádci",                players:["Zbyňek Stuchlík","David Říháček"],  password:"zradci123", color:"#22c55e" },
   { id:"t5", name:"P(a/r)DEL PENETRÁTORS", players:["Tomáš Engel",    "Radek Pich"],     password:"pardel123", color:"#ec4899" },
   { id:"t6", name:"Síťoví Gangsteři",      players:["Tomáš Plesník",  "Filip Dovalil"],  password:"sitovi123", color:"#eab308" },
   { id:"t7", name:"IBM Elders",            players:["Kuba Dorfl",     "Petr Holomeček"], password:"ibm123",    color:"#06b6d4" },
-  { id:"t8", name:"Dřeváci",               players:["Jirka Bucek",    "Vendy Kalita"],   password:"drevaci123",color:"#ef4444" },
+  { id:"t8", name:"Dřeváci",               players:["Jirka Bucek",    "Zdeněk Šubr"],   password:"drevaci123",color:"#ef4444" },
 ];
 
 // ── 28 RR matches with WhatsApp links ─────────────────────────────────────────
