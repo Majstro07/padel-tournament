@@ -38,15 +38,7 @@ const C = {
 };
 
 // ── Play-window engine ────────────────────────────────────────────────────────
-function nextMonday() {
-  const d = new Date();
-  const day = d.getDay();
-  const diff = day === 1 ? 7 : (8 - day) % 7 || 7;
-  d.setDate(d.getDate() + diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-const TOURNAMENT_START = nextMonday();
+const TOURNAMENT_START = new Date("2026-05-04T00:00:00");
 const WINDOW_DAYS = 14;
 const JOKERS_PER_TEAM = 1;
 
