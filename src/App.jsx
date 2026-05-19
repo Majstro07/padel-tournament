@@ -1,24 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 
-// ── Storage (localStorage wrapper matching original API shape) ─────────────────
-const storage = {
-  get: async (k) => {
-    try {
-      const v = localStorage.getItem(k);
-      return v !== null ? { value: v } : null;
-    } catch {
-      return null;
-    }
-  },
-  set: async (k, v) => {
-    try {
-      localStorage.setItem(k, v);
-      return true;
-    } catch {
-      return null;
-    }
-  },
-};
 
 // ── dCOS brand palette ────────────────────────────────────────────────────────
 const C = {
@@ -94,7 +75,7 @@ const SEED_TEAMS = [
   { id:"t5", name:"P(a/r)DEL PENETRÁTORS", players:["Tomáš Engel",    "Radek Pich"],     password:"pardel123", color:"#ec4899" },
   { id:"t6", name:"Síťoví Gangsteři",      players:["Tomáš Plesník",  "Filip Dovalil"],  password:"sitovi123", color:"#eab308" },
   { id:"t7", name:"IBM Elders",            players:["Kuba Dorfl",     "Petr Holomeček"], password:"ibm123",    color:"#06b6d4" },
-  { id:"t8", name:"Dřeváci",               players:["Jirka Bucek",    "Zdeněk Šubr"],   password:"drevaci123",color:"#ef4444" },
+  { id:"t8", name:"Dřeváci",               players:["Jirka Bucek",    "Zdeněk Šubr"],  password:"drevaci123",color:"#ef4444" },
 ];
 
 // ── 28 RR matches with WhatsApp links ─────────────────────────────────────────
@@ -137,7 +118,7 @@ const SEED_KNOCKOUT = [
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function computeStandings(teams, rr) {
+function computeStandings(teams, rr, penalties = {}) {
   const s = {};
   teams.forEach(t => { s[t.id] = { w:0, l:0, d:0, pts:0, gf:0, ga:0 }; });
   rr.forEach(m => {
@@ -150,7 +131,10 @@ function computeStandings(teams, rr) {
     else            { s[m.teamA].d++; s[m.teamA].pts++; s[m.teamB].d++; s[m.teamB].pts++; }
   });
   return teams
-    .map(t => ({ ...t, ...s[t.id], played: s[t.id].w + s[t.id].l + s[t.id].d }))
+    .map(t => {
+      const pen = penalties[t.id] || 0;
+      return { ...t, ...s[t.id], played: s[t.id].w + s[t.id].l + s[t.id].d, penalty: pen, pts: Math.max(0, s[t.id].pts - pen) };
+    })
     .sort((a, b) => b.pts - a.pts || b.w - a.w);
 }
 function rrComplete(rr) { return rr.every(m => m.scoreA !== null); }
@@ -196,34 +180,38 @@ export default function App() {
     { id:1, teamId:"t1", text:"Připraveni na zápas! 🎾", ts:Date.now()-120000 },
     { id:2, teamId:"t4", text:"Hodně štěstí všem 💪",    ts:Date.now()-60000  },
   ]);
-  const [jokers,  setJokers]  = useState({});
+  const [jokers,    setJokers]    = useState({});
+  const [penalties, setPenalties] = useState({});
   const [session, setSession] = useState(null);
   const [tab,     setTab]     = useState("leaderboard");
   const [loaded,  setLoaded]  = useState(false);
 
   useEffect(() => {
-    (async () => {
-      const [tm,rr,ko,mg,jk] = await Promise.all([
-        storage.get("dcos4:teams"), storage.get("dcos4:rr"),
-        storage.get("dcos4:ko"),    storage.get("dcos4:messages"),
-        storage.get("dcos4:jokers"),
-      ]);
-      if (tm) setTeams(JSON.parse(tm.value));
-      if (rr) setRRMatches(JSON.parse(rr.value));
-      if (ko) setKnockout(JSON.parse(ko.value));
-      if (mg) setMessages(JSON.parse(mg.value));
-      if (jk) setJokers(JSON.parse(jk.value));
+    fetch('/api/state').then(r => r.json()).then(s => {
+      if (s.teams)     setTeams(s.teams);
+      if (s.rr)        setRRMatches(s.rr);
+      if (s.ko)        setKnockout(s.ko);
+      if (s.messages)  setMessages(s.messages);
+      if (s.jokers)    setJokers(s.jokers);
+      if (s.penalties) setPenalties(s.penalties);
       setLoaded(true);
-    })();
+    }).catch(() => setLoaded(true));
   }, []);
 
-  useEffect(() => { if (loaded) storage.set("dcos4:teams",    JSON.stringify(teams));    }, [teams,    loaded]);
-  useEffect(() => { if (loaded) storage.set("dcos4:rr",       JSON.stringify(rrMatches));}, [rrMatches,loaded]);
-  useEffect(() => { if (loaded) storage.set("dcos4:ko",       JSON.stringify(knockout)); }, [knockout, loaded]);
-  useEffect(() => { if (loaded) storage.set("dcos4:messages", JSON.stringify(messages)); }, [messages, loaded]);
-  useEffect(() => { if (loaded) storage.set("dcos4:jokers",   JSON.stringify(jokers));   }, [jokers,   loaded]);
+  const saveTimer = useRef(null);
+  useEffect(() => {
+    if (!loaded) return;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ teams, rr: rrMatches, ko: knockout, messages, jokers, penalties }),
+      });
+    }, 500);
+  }, [teams, rrMatches, knockout, messages, jokers, penalties, loaded]);
 
-  const standings = computeStandings(teams, rrMatches);
+  const standings = computeStandings(teams, rrMatches, penalties);
   const teamMap   = Object.fromEntries(teams.map(t => [t.id, t]));
   const groupDone = rrComplete(rrMatches);
   const isAdmin   = session?.id === "t3";
@@ -345,7 +333,7 @@ export default function App() {
         {tab==="chat"        && <Chat messages={messages} teamMap={teamMap} session={session} onSend={sendMessage} />}
         {tab==="courts"      && <CourtsTab />}
         {tab==="rules"       && <Rules />}
-        {tab==="admin"       && isAdmin && <Admin teams={teams} onUpdatePlayers={updateTeamPlayers} onUpdateName={updateTeamName} />}
+        {tab==="admin"       && isAdmin && <Admin teams={teams} rrMatches={rrMatches} jokers={jokers} penalties={penalties} onUpdatePlayers={updateTeamPlayers} onUpdateName={updateTeamName} onPenalty={(id, pts) => setPenalties(p => ({...p, [id]: pts}))} />}
       </main>
 
       {/* ── Footer ── */}
@@ -697,7 +685,7 @@ function Leaderboard({ standings, groupDone }) {
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
           <thead>
             <tr style={{ background:C.navy }}>
-              {["#","Team","Players","P","W","L","Pts"].map(h=>(
+              {["#","Team","Players","P","W","L","Pts","Pen"].map(h=>(
                 <th key={h} style={{ padding:"11px 14px", textAlign:h==="Team"||h==="Players"?"left":"center", color:"rgba(255,255,255,.75)", fontSize:11, fontWeight:600, letterSpacing:".08em", textTransform:"uppercase" }}>{h}</th>
               ))}
             </tr>
@@ -724,13 +712,18 @@ function Leaderboard({ standings, groupDone }) {
                 <td style={{ padding:"13px 14px", textAlign:"center" }}>
                   <span style={{ background:C.orange, color:C.white, borderRadius:6, padding:"3px 11px", fontWeight:700, fontSize:14 }}>{t.pts}</span>
                 </td>
+                <td style={{ padding:"13px 14px", textAlign:"center" }}>
+                  {t.penalty > 0
+                    ? <span style={{ background:"#fef2f2", color:"#b91c1c", borderRadius:6, padding:"3px 10px", fontWeight:700, fontSize:13 }}>−{t.penalty}</span>
+                    : <span style={{ color:C.textLight, fontSize:13 }}>—</span>}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
       <div style={{ marginTop:10, display:"flex", gap:16, flexWrap:"wrap", color:C.textLight, fontSize:11 }}>
-        {["P=Played","W=Win","L=Loss","Pts=Points"].map(l=><span key={l}>{l}</span>)}
+        {["P=Played","W=Win","L=Loss","Pts=Points","Pen=Penalty deduction"].map(l=><span key={l}>{l}</span>)}
       </div>
     </div>
   );
@@ -1296,10 +1289,11 @@ function Rules() {
 }
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
-function Admin({ teams, onUpdatePlayers, onUpdateName }) {
-  const [editing, setEditing] = useState(null); // teamId being edited
-  const [draft,   setDraft]   = useState({});   // { name, p0, p1 }
+function Admin({ teams, rrMatches, jokers, penalties, onUpdatePlayers, onUpdateName, onPenalty }) {
+  const [editing, setEditing] = useState(null);
+  const [draft,   setDraft]   = useState({});
   const [saved,   setSaved]   = useState(null);
+  const numWindows = Math.max(currentWindow() + 3, 4);
 
   function startEdit(t) {
     setEditing(t.id);
@@ -1316,7 +1310,44 @@ function Admin({ teams, onUpdatePlayers, onUpdateName }) {
 
   return (
     <div>
-      <SectionHead title="Admin Panel" sub="Logged in as EWP — edit team names and rosters" />
+      <SectionHead title="Admin Panel" sub="Logged in as EWP — edit team names, rosters and penalties" />
+
+      {/* ── Penalties ── */}
+      <div className="card" style={{ padding:"18px 20px", marginBottom:24 }}>
+        <div style={{ fontWeight:700, fontSize:15, color:C.navy, marginBottom:4 }}>Point Deductions</div>
+        <div style={{ fontSize:13, color:C.textMid, marginBottom:16 }}>Set penalty points per team. Deducted from standings automatically.</div>
+        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          {teams.map(t => {
+            const compliance = teamCompliance(t.id, rrMatches, jokers, numWindows);
+            const missed = compliance.filter(c => c.missed);
+            return (
+              <div key={t.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", background:C.bg, borderRadius:8, border:`1px solid ${C.border}` }}>
+                <div style={{ width:9, height:9, borderRadius:"50%", background:t.color, flexShrink:0 }} />
+                <div style={{ flex:1, minWidth:0 }}>
+                  <span style={{ fontWeight:600, fontSize:13, color:C.navy }}>{t.name}</span>
+                  {missed.length > 0 && (
+                    <span style={{ marginLeft:8, fontSize:11, color:"#b91c1c", fontWeight:600 }}>
+                      ⚠ {missed.length} missed window{missed.length>1?"s":""}
+                    </span>
+                  )}
+                </div>
+                <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
+                  <span style={{ fontSize:13, color:C.textMid }}>−</span>
+                  <input
+                    type="number" min="0" max="99"
+                    value={penalties[t.id] || 0}
+                    onChange={e => onPenalty(t.id, Math.max(0, parseInt(e.target.value) || 0))}
+                    style={{ width:60, textAlign:"center", padding:"6px 8px" }}
+                  />
+                  <span style={{ fontSize:13, color:C.textMid }}>pts</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Team Editor ── */}
 
       <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
         {teams.map(t => {

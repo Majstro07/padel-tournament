@@ -2,10 +2,26 @@ import express from 'express';
 import * as cheerio from 'cheerio';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const STATE_FILE = path.join(__dirname, 'state.json');
+
+app.use(express.json());
+
+function readState() {
+  try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); }
+  catch { return {}; }
+}
+
+app.get('/api/state', (_req, res) => res.json(readState()));
+
+app.post('/api/state', (req, res) => {
+  fs.writeFileSync(STATE_FILE, JSON.stringify(req.body));
+  res.json({ ok: true });
+});
 
 const PLAYTOMIC_VENUES = [
   {
