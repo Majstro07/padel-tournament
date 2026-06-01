@@ -198,18 +198,6 @@ export default function App() {
     }).catch(() => setLoaded(true));
   }, []);
 
-  const saveTimer = useRef(null);
-  useEffect(() => {
-    if (!loaded) return;
-    clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ teams, rr: rrMatches, ko: knockout, messages, jokers, penalties }),
-      });
-    }, 500);
-  }, [teams, rrMatches, knockout, messages, jokers, penalties, loaded]);
 
   const standings = computeStandings(teams, rrMatches, penalties);
   const teamMap   = Object.fromEntries(teams.map(t => [t.id, t]));
@@ -217,10 +205,13 @@ export default function App() {
   const isAdmin   = session?.id === "t3";
 
   function submitRR(id, sA, sB) {
-    setRRMatches(p => p.map(m => m.id===id ? {...m, scoreA:sA, scoreB:sB, scoreTs: new Date().toISOString()} : m));
+    const scoreTs = new Date().toISOString();
+    setRRMatches(p => p.map(m => m.id===id ? {...m, scoreA:sA, scoreB:sB, scoreTs} : m));
+    fetch(`/api/state/rr/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({scoreA:sA, scoreB:sB, scoreTs}) });
   }
   function submitKO(id, sA, sB) {
     setKnockout(p => { const u=p.map(m=>m.id===id?{...m,scoreA:sA,scoreB:sB}:m); return syncKnockout(u,standings); });
+    fetch(`/api/state/ko/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({scoreA:sA, scoreB:sB}) });
   }
   useEffect(() => {
     if (groupDone) setKnockout(p => syncKnockout(p, standings));
@@ -229,23 +220,29 @@ export default function App() {
 
   function updateTeamPlayers(teamId, newPlayers) {
     setTeams(p => p.map(t => t.id === teamId ? { ...t, players: newPlayers } : t));
+    fetch(`/api/state/team/${teamId}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({players:newPlayers}) });
   }
   function updateTeamName(teamId, newName) {
     setTeams(p => p.map(t => t.id === teamId ? { ...t, name: newName } : t));
+    fetch(`/api/state/team/${teamId}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:newName}) });
   }
 
   function changePassword(teamId, newPw) {
     setTeams(p => p.map(t => t.id===teamId ? {...t, password:newPw} : t));
     setSession(p => p ? {...p, password:newPw} : p);
+    fetch(`/api/state/team/${teamId}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:newPw}) });
   }
   function sendMessage(text) {
     if (!session||!text.trim()) return;
-    setMessages(p => [...p, { id:Date.now(), teamId:session.id, text:text.trim(), ts:Date.now() }]);
+    const msg = { id:Date.now(), teamId:session.id, text:text.trim(), ts:Date.now() };
+    setMessages(p => [...p, msg]);
+    fetch('/api/state/message', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(msg) });
   }
   function useJoker(teamId, windowIdx) {
     const used = jokers[teamId] || [];
     if (used.length >= JOKERS_PER_TEAM) return;
     setJokers(p => ({ ...p, [teamId]: [...used, windowIdx] }));
+    fetch('/api/state/joker', { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({teamId, window:windowIdx}) });
   }
 
   if (!loaded) return (
@@ -333,7 +330,7 @@ export default function App() {
         {tab==="chat"        && <Chat messages={messages} teamMap={teamMap} session={session} onSend={sendMessage} />}
         {tab==="courts"      && <CourtsTab />}
         {tab==="rules"       && <Rules />}
-        {tab==="admin"       && isAdmin && <Admin teams={teams} rrMatches={rrMatches} jokers={jokers} penalties={penalties} onUpdatePlayers={updateTeamPlayers} onUpdateName={updateTeamName} onPenalty={(id, pts) => setPenalties(p => ({...p, [id]: pts}))} />}
+        {tab==="admin"       && isAdmin && <Admin teams={teams} rrMatches={rrMatches} jokers={jokers} penalties={penalties} onUpdatePlayers={updateTeamPlayers} onUpdateName={updateTeamName} onPenalty={(id, pts) => { setPenalties(p => ({...p, [id]: pts})); fetch(`/api/state/penalty/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({pts}) }); }} />}
       </main>
 
       {/* ── Footer ── */}

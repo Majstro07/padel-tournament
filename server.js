@@ -16,10 +16,49 @@ function readState() {
   catch { return {}; }
 }
 
+function patchState(updater) {
+  const next = updater(readState());
+  fs.writeFileSync(STATE_FILE, JSON.stringify(next));
+  return next;
+}
+
 app.get('/api/state', (_req, res) => res.json(readState()));
 
-app.post('/api/state', (req, res) => {
-  fs.writeFileSync(STATE_FILE, JSON.stringify(req.body));
+// Granular endpoints — each only touches its own slice of state
+app.patch('/api/state/rr/:id', (req, res) => {
+  const { scoreA, scoreB, scoreTs } = req.body;
+  patchState(s => ({ ...s, rr: (s.rr || []).map(m => m.id === req.params.id ? { ...m, scoreA, scoreB, scoreTs } : m) }));
+  res.json({ ok: true });
+});
+
+app.patch('/api/state/ko/:id', (req, res) => {
+  const { scoreA, scoreB } = req.body;
+  patchState(s => ({ ...s, ko: (s.ko || []).map(m => m.id === req.params.id ? { ...m, scoreA, scoreB } : m) }));
+  res.json({ ok: true });
+});
+
+app.post('/api/state/message', (req, res) => {
+  patchState(s => ({ ...s, messages: [...(s.messages || []), req.body] }));
+  res.json({ ok: true });
+});
+
+app.patch('/api/state/joker', (req, res) => {
+  const { teamId, window: w } = req.body;
+  patchState(s => {
+    const jokers = { ...(s.jokers || {}) };
+    jokers[teamId] = [...(jokers[teamId] || []), w];
+    return { ...s, jokers };
+  });
+  res.json({ ok: true });
+});
+
+app.patch('/api/state/team/:id', (req, res) => {
+  patchState(s => ({ ...s, teams: (s.teams || []).map(t => t.id === req.params.id ? { ...t, ...req.body } : t) }));
+  res.json({ ok: true });
+});
+
+app.patch('/api/state/penalty/:id', (req, res) => {
+  patchState(s => ({ ...s, penalties: { ...(s.penalties || {}), [req.params.id]: req.body.pts } }));
   res.json({ ok: true });
 });
 
